@@ -123,6 +123,40 @@ struct ConvertAndPack<half_t, float, N, Round> {
   }
 };
 
+template <int N, FloatRoundStyle Round>
+struct ConvertAndPack<halfhalf_t, float, N, Round> {
+
+  using Converter = NumericArrayConverter<halfhalf_t, float, N, Round>;
+
+  CUTLASS_HOST_DEVICE
+  Array<halfhalf_t, N> operator()(Array<float, N> const &source, const unsigned unit_length) {
+    Converter converter;
+
+    Array<float, N> tmp;
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      int idx = (((i << 1) & 2) | ((i >> 1) & 1) | (i & 0xfffffffc));
+      tmp[i] = source[idx];
+    }
+
+    return converter(tmp, unit_length);
+  }
+};
+
+template <int N, FloatRoundStyle Round>
+struct ConvertAndPack<tf32tf32_t, float, N, Round> {
+
+  using Converter = NumericArrayConverter<tf32tf32_t, float, N, Round>;
+
+  CUTLASS_HOST_DEVICE
+  Array<tf32tf32_t, N> operator()(Array<float, N> const &source, const unsigned unit_length) {
+    Converter converter;
+
+    return converter(source, unit_length);
+  }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -268,9 +302,9 @@ public:
   /// Performs a warp-level matrix multiply-accumulate operation
   CUTLASS_DEVICE
   void operator()(
-    FragmentC &D, 
-    TransformedFragmentA const &A, 
-    TransformedFragmentB const &B, 
+    FragmentC &D,
+    TransformedFragmentA const &A,
+    TransformedFragmentB const &B,
     FragmentC const &C
   ) const {
 
@@ -338,6 +372,86 @@ public:
     #endif
   }
 
+  /// Performs a warp-level matrix multiply-accumulate operation
+  CUTLASS_DEVICE
+  void operator()(
+    FragmentC &D,
+    FragmentC &dD,
+    TransformedFragmentA const &A,
+    TransformedFragmentB const &B,
+    FragmentC const &C
+  ) const {
+
+    using MmaOperandA = typename ArchMmaOperator::FragmentA;
+    using MmaOperandB = typename ArchMmaOperator::FragmentB;
+    using MmaOperandC = typename ArchMmaOperator::FragmentC;
+
+    D = C;
+
+    MmaOperandA const *ptr_A = reinterpret_cast<MmaOperandA const *>(&A);
+    MmaOperandB const *ptr_B = reinterpret_cast<MmaOperandB const *>(&B);
+    MmaOperandC *ptr_D  = reinterpret_cast<MmaOperandC *>(&D);
+    MmaOperandC *ptr_dD = reinterpret_cast<MmaOperandC *>(&dD);
+
+    #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 800)
+      // Serpentine visitation order maximizing reuse of Rb
+      CUTLASS_PRAGMA_UNROLL
+      for (int n = 0; n < MmaIterations::kColumn; ++n) {
+
+        CUTLASS_PRAGMA_UNROLL
+        for (int m = 0; m < MmaIterations::kRow; ++m) {
+
+          int m_serpentine = ((n % 2) ? (MmaIterations::kRow - 1 - m) : m);
+
+          if (AccumulatorsInRowMajor) {  // matrix B is reordered
+            mma(
+              ptr_D[n + m_serpentine * MmaIterations::kColumn],
+              ptr_dD[n + m_serpentine * MmaIterations::kColumn],
+              ptr_A[m_serpentine],
+              ptr_B[n],
+              ptr_D[n + m_serpentine * MmaIterations::kColumn]);
+          } else {
+            mma(
+              ptr_D[m_serpentine + n * MmaIterations::kRow],
+              ptr_dD[m_serpentine + n * MmaIterations::kRow],
+              ptr_A[m_serpentine],
+              ptr_B[n],
+              ptr_D[m_serpentine + n * MmaIterations::kRow]);
+          }
+        }
+      }
+    #elif defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800)
+      // Serpentine visitation order maximizing reuse of Ra
+      CUTLASS_PRAGMA_UNROLL
+      for (int m = 0; m < MmaIterations::kRow; ++m) {
+
+        CUTLASS_PRAGMA_UNROLL
+        for (int n = 0; n < MmaIterations::kColumn; ++n) {
+
+          int n_serpentine = ((m % 2) ? (MmaIterations::kColumn - 1 - n) : n);
+
+          if (AccumulatorsInRowMajor) {  // matrix B is reordered
+            mma(
+              ptr_D[n_serpentine + m * MmaIterations::kColumn],
+              ptr_dD[n_serpentine + m * MmaIterations::kColumn],
+              ptr_A[m],
+              ptr_B[n_serpentine],
+              ptr_D[n_serpentine + m * MmaIterations::kColumn]);
+          } else {
+            mma(
+				ptr_D[m + n_serpentine * MmaIterations::kRow],
+				ptr_dD[m + n_serpentine * MmaIterations::kRow],
+                ptr_A[m],
+                ptr_B[n_serpentine],
+                ptr_D[m + n_serpentine * MmaIterations::kRow]);
+          }
+        }
+      }
+    #else
+      assert(0);
+    #endif
+  }
+
   /// Transform the mma operands to the required types
   CUTLASS_DEVICE
   void transform(TransformedFragmentA &dst_A, TransformedFragmentB &dst_B,
@@ -383,10 +497,19 @@ public:
           ptr_dst_A = reinterpret_cast<Array<typename ArchMmaOperator::ElementA,
                                              FragmentA::kElements / 2> *>(&dst_A);
   
-      dst_B = convert_B(B);
-  
-      ptr_dst_A[0] = convert_A(ptr_A[0]);
-      ptr_dst_A[1] = convert_A(ptr_A[1]);
+      if constexpr (std::is_same<halfhalf_t, typename ArchMmaOperator::ElementA>::value) {
+        dst_B = convert_B(B, 2);
+        ptr_dst_A[0] = convert_A(ptr_A[0], 4);
+        ptr_dst_A[1] = convert_A(ptr_A[1], 4);
+      } else if constexpr (std::is_same<tf32tf32_t, typename ArchMmaOperator::ElementA>::value) {
+        dst_B = convert_B(B, 2);
+        ptr_dst_A[0] = convert_A(ptr_A[0], 4);
+        ptr_dst_A[1] = convert_A(ptr_A[1], 4);
+      } else {
+        dst_B = convert_B(B);
+        ptr_dst_A[0] = convert_A(ptr_A[0]);
+        ptr_dst_A[1] = convert_A(ptr_A[1]);
+      }
     #else
       assert(0);
     #endif

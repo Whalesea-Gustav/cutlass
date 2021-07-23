@@ -26,13 +26,10 @@
 /**
 Please check example 07 and 08 for the basics of tensor op gemm kernels.  On NVIDIA Ampere
 architecture, most concept still holds.  The two main differences are
-
 1. NVIDIA Ampere architecture introduces a new series of tensor core instructions (see 
    include/cutlass/arch/mma_sm80.h) which are more efficient on Ampere.
-
 2. NVIDIA Ampere architecture uses cp_async() to build multistage software pipeline to better hide
    latency (see include/cutlass/gemm/threadblock/mma_multistage.h)
-
 Moreover, NVIDIA Ampere architecture starts supporting tfloat32 (see include/cutlass/tfloat32.h)
 data types in tensor cores.  One big advantage is that we can load in fp32 data and convert them
 implicitly to tf32 inside the GEMM kernel which means no change is needed to accelerate traditional

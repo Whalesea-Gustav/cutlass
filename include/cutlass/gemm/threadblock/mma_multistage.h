@@ -363,6 +363,12 @@ public:
 
     // Perform accumulation in the 'd' output operand
     accum = src_accum;
+#if defined(TC_COR) || defined(TC_COR_TF32)
+	FragmentC frag_dd;
+	for (unsigned i = 0; i < frag_dd.kElements; i++) {
+		frag_dd[i] = 0.0f;
+	}
+#endif
 
     // Waits until kStages-2 stages have committed.
     cutlass::arch::cp_async_wait<Base::kStages - 2>();
@@ -431,12 +437,22 @@ public:
                              warp_loaded_frag_A[warp_mma_k % 2],
                              warp_loaded_frag_B[warp_mma_k % 2]);
 
+#if defined(TC_COR) || defined(TC_COR_TF32)
         warp_mma(
-          accum, 
+          accum,
+		  frag_dd,
           warp_transformed_frag_A[warp_mma_k % 2],
-          warp_transformed_frag_B[warp_mma_k % 2], 
+          warp_transformed_frag_B[warp_mma_k % 2],
           accum
         );
+#else
+        warp_mma(
+          accum,
+          warp_transformed_frag_A[warp_mma_k % 2],
+          warp_transformed_frag_B[warp_mma_k % 2],
+          accum
+        );
+#endif
 
         // Issue global->shared copies for the this stage
         if (warp_mma_k < Base::kWarpGemmIterations - 1) {
@@ -513,6 +529,15 @@ public:
       }
 
     }
+#if defined(TC_COR) || defined(TC_COR_TF32)
+	for (unsigned i = 0; i < frag_dd.kElements; i++) {
+      accum[i] += frag_dd[i] / 2048.f;
+	}
+#else
+	for (unsigned i = 0; i < frag_dd.kElements; i++) {
+      accum[i] += frag_dd[i];
+	}
+#endif
     
     // commit and drain all pending and predicated LDGSTS pnz from the GEMM mainloop
     cutlass::arch::cp_async_fence();

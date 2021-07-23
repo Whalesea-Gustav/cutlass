@@ -854,9 +854,15 @@ struct DefaultMmaCore<Shape_, WarpShape_, InstructionShape_, float,
   //
 
   // Define the warp-level tensor op
+#ifdef TC_COR
+  using MmaTensorOp = typename cutlass::gemm::warp::DefaultMmaTensorOp<
+      WarpShape, InstructionShape, halfhalf_t, SmemLayoutA, halfhalf_t, SmemLayoutB,
+      ElementC, LayoutC, Operator, WarpCount::kK>::Type;
+#else
   using MmaTensorOp = typename cutlass::gemm::warp::DefaultMmaTensorOp<
       WarpShape, InstructionShape, half_t, SmemLayoutA, half_t, SmemLayoutB,
       ElementC, LayoutC, Operator, WarpCount::kK>::Type;
+#endif
 
   /// Policy used to define MmaPipelined 
   using MmaPolicy = MmaPolicy<

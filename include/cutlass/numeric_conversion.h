@@ -1411,6 +1411,120 @@ struct UnpackPredicates {
   }
 };
 
+// halfhalf
+template <FloatRoundStyle Round>
+struct NumericConverter<float, halfhalf_t, Round> {
+
+  using result_type = float;
+  using source_type = halfhalf_t;
+  static FloatRoundStyle const round_style = Round;
+
+  CUTLASS_HOST_DEVICE
+  static result_type convert(source_type const & s) {
+
+    return static_cast<float>(s);
+  }
+
+  CUTLASS_HOST_DEVICE
+  result_type operator()(source_type const &s) {
+    return convert(s);
+  }
+};
+
+template <FloatRoundStyle Round>
+struct NumericConverter<halfhalf_t, float, Round> {
+
+  using result_type = halfhalf_t;
+  using source_type = float;
+  static FloatRoundStyle const round_style = Round;
+
+  CUTLASS_HOST_DEVICE
+  static result_type convert(source_type const & s) {
+
+    return static_cast<halfhalf_t>(s);
+  }
+
+  CUTLASS_HOST_DEVICE
+  result_type operator()(source_type const &s) {
+    return convert(s);
+  }
+};
+template <
+  int N,
+  FloatRoundStyle Round
+>
+struct NumericArrayConverter<halfhalf_t, float, N, Round> {
+
+  using result_type = Array<halfhalf_t, N>;
+  using source_type = Array<float, N>;
+  static FloatRoundStyle const round_style = Round;
+
+  CUTLASS_HOST_DEVICE
+  result_type operator()(source_type const &source, const unsigned unit_length) {
+    Array<halfhalf_t, N> tmp;
+	auto p = reinterpret_cast<half*>(&tmp);
+    for (int i = 0; i < N; ++i) {
+	  const auto block_id = i / unit_length;
+	  const auto lane_id = i % unit_length;
+	  auto hv_ptr  = p + block_id * 2 * unit_length;
+	  auto dhv_ptr = hv_ptr + unit_length;
+	  const auto v = source[i];
+	  const auto hv  = __float2half(v);
+	  const auto dhv = __float2half((v - __half2float(hv)) * 2048.f);
+      hv_ptr [lane_id] = hv;
+      dhv_ptr[lane_id] = dhv;
+	}
+	//printf("%s(%e) -> %e [%s, %u]\n", __func__, source[0], __half2float(hv_ptr[0]), __FILE__, __LINE__);
+
+    return tmp;
+  }
+};
+
+//tf32tf32_t
+template <
+  int N,
+  FloatRoundStyle Round
+>
+struct NumericArrayConverter<tf32tf32_t, float, N, Round> {
+
+  using result_type = Array<tf32tf32_t, N>;
+  using source_type = Array<float, N>;
+  static FloatRoundStyle const round_style = Round;
+
+  // float to tf32
+  CUTLASS_HOST_DEVICE
+  static float to_tf32(const float a) {
+#if defined(__CUDA_ARCH__)
+    float ret;
+    asm("{.reg .b32 %mr;\n"
+        "cvt.rna.tf32.f32 %mr, %1;\n"
+        "mov.b32 %0, %mr;}\n" : "=f"(ret) : "f"(a));
+    return ret;
+#else
+	return a;
+#endif
+  }
+
+  CUTLASS_HOST_DEVICE
+  result_type operator()(source_type const &source, const unsigned unit_length) {
+    Array<tf32tf32_t, N> tmp;
+	auto p = reinterpret_cast<float*>(&tmp);
+    for (int i = 0; i < N; ++i) {
+	  const auto block_id = i / unit_length;
+	  const auto lane_id = i % unit_length;
+	  auto hv_ptr  = p + block_id * 2 * unit_length;
+	  auto dhv_ptr = hv_ptr + unit_length;
+	  const auto v = source[i];
+	  const auto hv  = to_tf32(v);
+	  const auto dhv = to_tf32((v - hv) * 2048);
+      hv_ptr [lane_id] = hv;
+      dhv_ptr[lane_id] = dhv;
+	}
+
+    return tmp;
+  }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace cutlass

@@ -115,8 +115,13 @@ struct DefaultMmaTensorOp<
       cutlass::arch::Mma<
         GemmShape<16, 8, 8>, 
         32, 
-        half_t, cutlass::layout::RowMajor, 
+#ifdef TC_COR
+        halfhalf_t, cutlass::layout::RowMajor,
+        halfhalf_t, cutlass::layout::ColumnMajor,
+#else
+        half_t, cutlass::layout::RowMajor,
         half_t, cutlass::layout::ColumnMajor,
+#endif
         float, cutlass::layout::RowMajor, 
         arch::OpMultiplyAdd
       >,
@@ -160,8 +165,13 @@ struct DefaultMmaTensorOp<
       cutlass::arch::Mma<
         InstructionShape_, 
         32, 
+#ifdef TC_COR_TF32
+        tf32tf32_t, cutlass::layout::RowMajor,
+        tf32tf32_t, cutlass::layout::ColumnMajor,
+#else
         tfloat32_t, cutlass::layout::RowMajor, 
         tfloat32_t, cutlass::layout::ColumnMajor,
+#endif
         float, cutlass::layout::RowMajor, 
         arch::OpMultiplyAdd
       >,

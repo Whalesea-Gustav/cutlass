@@ -1,0 +1,6 @@
+[submodule "examples/14_ampere_tf32_tensorop_gemm/mateval"]
+	path = examples/XX_error_correction/mateval
+	url = https://github.com/enp1s0/mateval
+[submodule "examples/14_ampere_tf32_tensorop_gemm/cutf"]
+	path = examples/XX_error_correction/cutf
+	url = https://github.com/enp1s0/cutf

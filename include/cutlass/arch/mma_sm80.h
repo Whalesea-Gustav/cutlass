@@ -255,6 +255,146 @@ struct Mma<gemm::GemmShape<16, 8, 8>, 32, tfloat32_t, layout::RowMajor,
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+// Matrix Multiply 1688 - Float TF32TF32
+//
+////////////////////////////////////////////////////////////////////////////////
+
+/// Matrix multiply-add operation: F32 = tf32 * tf32 + F32
+template <>
+struct Mma<gemm::GemmShape<16, 8, 8>, 32, tf32tf32_t, layout::RowMajor,
+           tf32tf32_t, layout::ColumnMajor, float, layout::RowMajor,
+           OpMultiplyAdd> {
+  using Shape = gemm::GemmShape<16, 8, 8>;
+
+  using ElementA = tf32tf32_t;
+  using LayoutA = layout::RowMajor;
+  using FragmentA = Array<tf32tf32_t, 4>;
+
+  using ElementB = tf32tf32_t;
+  using LayoutB = layout::ColumnMajor;
+  using FragmentB = Array<tf32tf32_t, 2>;
+
+  using ElementC = float;
+  using LayoutC = layout::RowMajor;
+  using FragmentC = Array<float, 4>;
+
+  using Operator = OpMultiplyAdd;
+  using ArchTag = arch::Sm80;
+
+  CUTLASS_HOST_DEVICE
+  void operator()(FragmentC &d, FragmentA const &a, FragmentB const &b,
+                  FragmentC const &c) const {
+
+#if defined(CUTLASS_ARCH_MMA_SM80_ENABLED)
+
+    float tmp[4] = {0.0f};
+    uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
+    uint32_t const *dA = A + 4;
+    uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
+    uint32_t const *dB = B + 2;
+    float const *C = reinterpret_cast<float const *>(&c);
+    float *D = reinterpret_cast<float *>(&d);
+
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(B[0]), "r"(B[1]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+
+#pragma unroll
+    for (unsigned i = 0; i < 4; i++) {
+      D[i] = tmp[i] + C[i];
+	  tmp[i] = 0.0f;
+    }
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(dA[0]), "r"(dA[1]), "r"(dA[2]), "r"(dA[3]), "r"(B[0]), "r"(B[1]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(dB[0]), "r"(dB[1]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+
+#pragma unroll
+	for (unsigned i = 0; i < 4; i++) {
+	  D[i] += tmp[i];
+	}
+
+#else
+
+    CUTLASS_UNUSED(d);
+    CUTLASS_UNUSED(a);
+    CUTLASS_UNUSED(b);
+    CUTLASS_UNUSED(c);
+    CUTLASS_NOT_IMPLEMENTED();
+
+#endif
+  }
+
+  CUTLASS_HOST_DEVICE
+  void operator()(
+		  FragmentC &d,
+		  FragmentC &dd,
+		  FragmentA const &a,
+		  FragmentB const &b,
+          FragmentC const &c
+		  ) const {
+
+#if defined(CUTLASS_ARCH_MMA_SM80_ENABLED)
+
+    uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
+    uint32_t const *dA = A + 4;
+    uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
+    uint32_t const *dB = B + 2;
+    float const *C = reinterpret_cast<float const *>(&c);
+    float *D = reinterpret_cast<float *>(&d);
+    float *dD = reinterpret_cast<float *>(&dd);
+
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(dA[0]), "r"(dA[1]), "r"(dA[2]), "r"(dA[3]), "r"(B[0]), "r"(B[1]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(dB[0]), "r"(dB[1]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+
+    float tmp[4] = {0.0f};
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(B[0]), "r"(B[1]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+
+#pragma unroll
+    for (unsigned i = 0; i < 4; i++) {
+      D[i] = tmp[i] + C[i];
+    }
+
+#else
+
+    CUTLASS_UNUSED(d);
+    CUTLASS_UNUSED(a);
+    CUTLASS_UNUSED(b);
+    CUTLASS_UNUSED(c);
+    CUTLASS_NOT_IMPLEMENTED();
+
+#endif
+  }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+//
 // Matrix Multiply 16816
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -394,9 +534,9 @@ template <>
 struct Mma<
   gemm::GemmShape<16, 8, 16>,
   32,
-  half_t,
+  halfhalf_t,
   layout::RowMajor,
-  half_t,
+  halfhalf_t,
   layout::ColumnMajor,
   float,
   layout::RowMajor,
@@ -404,13 +544,13 @@ struct Mma<
 
   using Shape = gemm::GemmShape<16, 8, 16>;
 
-  using ElementA = half_t;
+  using ElementA = halfhalf_t;
   using LayoutA = layout::RowMajor;
-  using FragmentA = Array<half_t, 8>;
+  using FragmentA = Array<halfhalf_t, 8>;
 
-  using ElementB = half_t;
+  using ElementB = halfhalf_t;
   using LayoutB = layout::ColumnMajor;
-  using FragmentB = Array<half_t, 4>;
+  using FragmentB = Array<halfhalf_t, 4>;
 
   using ElementC = float;
   using LayoutC = layout::RowMajor;
@@ -422,18 +562,22 @@ struct Mma<
   /// Computes multiply-add
   CUTLASS_HOST_DEVICE
   void operator()(
-    FragmentC &d,
-    FragmentA const &a,
-    FragmentB const &b,
-    FragmentC const &c
+    FragmentC &frag_d,
+    FragmentA const &frag_a,
+    FragmentB const &frag_b,
+    FragmentC const &frag_c
   ) const {
 
 #if defined(CUTLASS_ARCH_MMA_SM80_ENABLED)
 
-    uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
-    uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
-    float const *C = reinterpret_cast<float const *>(&c);
-    float *D = reinterpret_cast<float *>(&d);
+	float dhd[4] = {0.0f};
+	uint32_t const *A = reinterpret_cast<uint32_t const *>(&frag_a);
+    uint32_t const *dA = A + 4;
+    uint32_t const *B = reinterpret_cast<uint32_t const *>(&frag_b);
+    uint32_t const *dB = B + 2;
+    float const *C = reinterpret_cast<float const *>(&frag_c);
+    float *D = reinterpret_cast<float *>(&frag_d);
+    float *dD = reinterpret_cast<float *>(&dhd);
 
     asm volatile(
         "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
@@ -441,13 +585,29 @@ struct Mma<
         : "=f"(D[0]), "=f"(D[1]), "=f"(D[2]), "=f"(D[3])
         : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(B[0]), "r"(B[1]),
           "f"(C[0]), "f"(C[1]), "f"(C[2]), "f"(C[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
+        "{%10,%11,%12,%13};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(dB[0]), "r"(dB[1]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
+        "{%10,%11,%12,%13};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(dA[0]), "r"(dA[1]), "r"(dA[2]), "r"(dA[3]), "r"(B[0]), "r"(B[1]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+
+	for (unsigned i = 0; i < 4; i++) {
+	  D[i] += dD[i] / 2048;
+	}
 
 #else
 
-    CUTLASS_UNUSED(d);
-    CUTLASS_UNUSED(a);
-    CUTLASS_UNUSED(b);
-    CUTLASS_UNUSED(c);
+    CUTLASS_UNUSED(frag_d);
+    CUTLASS_UNUSED(frag_a);
+    CUTLASS_UNUSED(frag_b);
+    CUTLASS_UNUSED(frag_c);
     CUTLASS_NOT_IMPLEMENTED();
 
 #endif

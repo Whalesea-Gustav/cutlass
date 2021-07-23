@@ -235,7 +235,11 @@ struct DefaultMma<float, LayoutA, kAlignmentA, float, LayoutB,
   using MmaCore = typename cutlass::gemm::threadblock::DefaultMmaCore<
       ThreadblockShape, WarpShape, InstructionShape, float, LayoutA, float,
       LayoutB, float, layout::RowMajor, arch::OpClassTensorOp, 2,
+#ifndef TC_COR
       arch::OpMultiplyAddFastF16>;
+#else
+      arch::OpMultiplyAdd>;
+#endif
 
   // Define iterators over tiles from the A operand
   using IteratorA =
