@@ -3,12 +3,9 @@
 ## Build
 This example code uses [cutf](https://github.com/enp1s0/cutf) and [mateval](https://github.com/enp1s0/mateval).
 ```bash
+git clone https://github.com/enp1s0/cutlass -b error-correction-example
 git submodule update --init
-mkdir mateval/build
-cd mateval/build
-cmake ..
-make -j
-cd ../../
+cd examples/XX_error_correction
 make
 ```
 
