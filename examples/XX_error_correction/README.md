@@ -4,8 +4,8 @@
 This example code uses [cutf](https://github.com/enp1s0/cutf) and [mateval](https://github.com/enp1s0/mateval).
 ```bash
 git clone https://github.com/enp1s0/cutlass -b error-correction-example
+cd cutlass/examples/XX_error_correction
 git submodule update --init
-cd examples/XX_error_correction
 make
 ```
 
