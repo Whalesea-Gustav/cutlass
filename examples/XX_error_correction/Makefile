@@ -6,7 +6,7 @@ TARGET=ec.test
 
 
 all:
-	$(NVCC) ec_main.cu $(NVCCFLAGS) -o ampere_tf32_tensorop_gemm.test
+	$(NVCC) ec_main.cu $(NVCCFLAGS) -o $(TARGET)
 
 clean:
 	rm -f *.test
