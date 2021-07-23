@@ -70,8 +70,10 @@ struct sizeof_bits<bin1_t> {
 #include "cutlass/integer_subbyte.h"
 
 #include "cutlass/half.h"
+#include "cutlass/halfhalf.h"
 #include "cutlass/bfloat16.h"
 #include "cutlass/tfloat32.h"
+#include "cutlass/tf32tf32.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 

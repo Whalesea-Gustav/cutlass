@@ -472,7 +472,12 @@ struct DefaultGemmConfiguration<arch::OpClassTensorOp, arch::Sm80, ElementA,
        platform::is_same<ElementA, int4b_t>::value ||
        platform::is_same<ElementA, uint8_t>::value ||
        platform::is_same<ElementA, uint4b_t>::value),
-      arch::OpMultiplyAddSaturate, arch::OpMultiplyAdd>::type;
+#if defined(TC_COR)
+      arch::OpMultiplyAddSaturate, arch::OpMultiplyAddFastF16>::type
+#else
+      arch::OpMultiplyAddSaturate, arch::OpMultiplyAdd>::type
+#endif
+	  ;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

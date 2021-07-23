@@ -1,3 +1,7 @@
+//---------------------------------------------------  
+// See **[About error correction implementations](./examples/XX_error_correction/)**  
+//---------------------------------------------------  
+
 ![ALT](/media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete CUDA GEMM decomposition")
 
 # CUTLASS 2.5

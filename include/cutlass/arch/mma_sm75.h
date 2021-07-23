@@ -167,7 +167,6 @@ struct Mma<
                   FragmentC const &c) const {
 
 #if defined(CUTLASS_ARCH_MMA_SM75_ENABLED)
-
   unsigned const *A = reinterpret_cast<unsigned const *>(&a);
   unsigned const *B = reinterpret_cast<unsigned const *>(&b);
   float const *C = reinterpret_cast<float const *>(&c);
@@ -183,6 +182,152 @@ struct Mma<
 
 #else
     assert(0);
+#endif
+  }
+};
+
+/// Matrix multiply-add operation: F32 = F16 * F16 + F32 with error correction
+template <>
+struct Mma<
+  gemm::GemmShape<16, 8, 8>,
+  32,
+  halfhalf_t,
+  layout::RowMajor,
+  halfhalf_t,
+  layout::ColumnMajor,
+  float,
+  layout::RowMajor,
+  OpMultiplyAdd> {
+
+  using Shape = gemm::GemmShape<16, 8, 8>;
+
+  using ElementA = halfhalf_t;
+  using LayoutA = layout::RowMajor;
+  using FragmentA = Array<halfhalf_t, 4>;
+
+  using ElementB = halfhalf_t;
+  using LayoutB = layout::ColumnMajor;
+  using FragmentB = Array<halfhalf_t, 2>;
+
+  using ElementC = float;
+  using LayoutC = layout::RowMajor;
+  using FragmentC = Array<float, 4>;
+
+  using Operator = OpMultiplyAdd;
+  using ArchTag = arch::Sm75;
+
+  /// Computes multiply-add
+  CUTLASS_HOST_DEVICE
+  void operator()(
+    FragmentC &frag_d,
+    FragmentA const &frag_a,
+    FragmentB const &frag_b,
+    FragmentC const &frag_c
+  ) const {
+
+#if defined(CUTLASS_ARCH_MMA_SM75_ENABLED)
+
+    float tmp[4] = {0.0f};
+    uint32_t const *A = reinterpret_cast<uint32_t const *>(&frag_a);
+    uint32_t const *dA = A + 2;
+    uint32_t const *B = reinterpret_cast<uint32_t const *>(&frag_b);
+    uint32_t const *dB = B + 1;
+    float const *C = reinterpret_cast<float const *>(&frag_c);
+    float *D = reinterpret_cast<float *>(&frag_d);
+
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(B[0]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+#pragma unroll
+    for (unsigned i = 0; i < 4; i++) {
+      D[i] = tmp[i] + C[i];
+	  tmp[i] = 0.0f;
+    }
+
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(dA[0]), "r"(dA[1]), "r"(B[0]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(dB[0]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+
+#pragma unroll
+	for (unsigned i = 0; i < 4; i++) {
+	  D[i] += tmp[i] / 2048;
+	}
+
+#else
+
+    CUTLASS_UNUSED(frag_d);
+    CUTLASS_UNUSED(frag_a);
+    CUTLASS_UNUSED(frag_b);
+    CUTLASS_UNUSED(frag_c);
+    CUTLASS_NOT_IMPLEMENTED();
+
+#endif
+  }
+
+  CUTLASS_HOST_DEVICE
+  void operator()(
+    FragmentC &frag_d,
+    FragmentC &frag_dd,
+    FragmentA const &frag_a,
+    FragmentB const &frag_b,
+    FragmentC const &frag_c
+  ) const {
+
+#if defined(CUTLASS_ARCH_MMA_SM75_ENABLED)
+
+    uint32_t const *A = reinterpret_cast<uint32_t const *>(&frag_a);
+    uint32_t const *dA = A + 2;
+    uint32_t const *B = reinterpret_cast<uint32_t const *>(&frag_b);
+    uint32_t const *dB = B + 1;
+    float const *C = reinterpret_cast<float const *>(&frag_c);
+    float *D = reinterpret_cast<float *>(&frag_d);
+    float *dD = reinterpret_cast<float *>(&frag_dd);
+
+    float tmp[4] = {0.0f};
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3])
+        : "r"(A[0]), "r"(A[1]), "r"(B[0]),
+          "f"(tmp[0]), "f"(tmp[1]), "f"(tmp[2]), "f"(tmp[3]));
+#pragma unroll
+    for (unsigned i = 0; i < 4; i++) {
+      D[i] = tmp[i] + C[i];
+    }
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(dA[0]), "r"(dA[1]), "r"(B[0]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+    asm volatile(
+        "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32  {%0,%1,%2,%3}, {%4,%5}, {%6}, "
+        "{%7,%8,%9,%10};\n"
+        : "=f"(dD[0]), "=f"(dD[1]), "=f"(dD[2]), "=f"(dD[3])
+        : "r"(A[0]), "r"(A[1]), "r"(dB[0]),
+          "f"(dD[0]), "f"(dD[1]), "f"(dD[2]), "f"(dD[3]));
+
+#else
+
+    CUTLASS_UNUSED(frag_d);
+    CUTLASS_UNUSED(frag_dd);
+    CUTLASS_UNUSED(frag_a);
+    CUTLASS_UNUSED(frag_b);
+    CUTLASS_UNUSED(frag_c);
+    CUTLASS_NOT_IMPLEMENTED();
+
 #endif
   }
 };
