@@ -22,7 +22,7 @@
 
 cmake_minimum_required(VERSION 3.12.4 FATAL_ERROR)
 
-set(CMAKE_CUDA_ARCHITECTURES "86")
+set(CMAKE_CUDA_ARCHITECTURES "86" "89")
 add_definitions(-DTC_COR)
 
 if(cutlass_LOADED)
