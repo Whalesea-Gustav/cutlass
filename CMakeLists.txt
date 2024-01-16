@@ -22,6 +22,9 @@
 
 cmake_minimum_required(VERSION 3.12.4 FATAL_ERROR)
 
+set(CMAKE_CUDA_ARCHITECTURES "86")
+add_definitions(-DTC_COR)
+
 if(cutlass_LOADED)
   # If CUTLASS has been previously fetched and loaded, don't do it again.
   return()

@@ -466,25 +466,7 @@ public:
     FloatRoundStyle const kRoundB =
         PreferredRoundingMode<typename ArchMmaOperator::ElementB,
                               ElementB>::kRound;
-    #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 800)
-      detail::ConvertAndPack<typename ArchMmaOperator::ElementA, ElementA,
-                            FragmentA::kElements, kRoundA>
-          convert_A;
-      NumericArrayConverter<typename ArchMmaOperator::ElementB, ElementB,
-                            FragmentB::kElements / 2, kRoundB>
-          convert_B;
-      Array<ElementB, FragmentB::kElements / 2> const *ptr_B =
-          reinterpret_cast<Array<ElementB, FragmentB::kElements / 2> const *>(&B);
-      Array<typename ArchMmaOperator::ElementB, FragmentB::kElements / 2> *
-          ptr_dst_B = reinterpret_cast<Array<typename ArchMmaOperator::ElementB,
-                                             FragmentB::kElements / 2> *>(&dst_B);
-  
-      dst_A = convert_A(A);
-  
-      ptr_dst_B[0] = convert_B(ptr_B[0]);
-      ptr_dst_B[1] = convert_B(ptr_B[1]);
-
-    #elif defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800)
+    #if defined(__CUDA_ARCH__)
       detail::ConvertAndPack<typename ArchMmaOperator::ElementA, ElementA,
                             FragmentA::kElements / 2, kRoundA>
           convert_A;
