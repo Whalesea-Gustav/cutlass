@@ -20,8 +20,16 @@
 # STRICT LIABILITY, OR TOR (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+#add_compile_definitions(/WX)
+
 cutlass_example_add_executable(
-  14_ampere_tf32_tensorop_gemm
-  ampere_tf32_tensorop_gemm.cu
-  )
+        XX_error_correction
+        ec_main.cu
+)
+
+target_include_directories(XX_error_correction
+        PRIVATE cutf/include
+        PRIVATE mateval/include
+)
 

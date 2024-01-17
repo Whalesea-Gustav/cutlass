@@ -86,7 +86,11 @@ endif()
 set(CUTLASS_ENABLE_TESTS ${CUTLASS_ENABLE_TESTS_INIT} CACHE BOOL "Enable CUTLASS Tests")
 
 if (CUTLASS_ENABLE_TESTS)
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/googletest.cmake)
+  #include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/googletest.cmake)
+  if (MSVC)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  endif()
+  add_subdirectory(extern/googletest)
 endif()
 
 set(CUTLASS_NVCC_ARCHS_SUPPORTED "")
@@ -152,7 +156,7 @@ endif()
 
 if (WIN32)
   # Enable more warnings and treat as errors
-  list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcompiler=/W3 -Xcompiler=/WX)
+  #list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcompiler=/W3 -Xcompiler=/WX)
 
   # Disable warning on Unicode characters
   list(APPEND CUTLASS_CUDA_NVCC_FLAGS -Xcompiler=/wd4819)
